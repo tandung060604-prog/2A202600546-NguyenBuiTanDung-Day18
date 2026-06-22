@@ -2,7 +2,7 @@ from __future__ import annotations
 
 """Module 4: RAGAS Evaluation — 4 metrics + failure analysis."""
 
-import os, sys, json
+import os, sys, json, math
 from dataclasses import dataclass
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -30,83 +30,119 @@ def load_test_set(path: str = TEST_SET_PATH) -> list[dict]:
 def evaluate_ragas(questions: list[str], answers: list[str],
                    contexts: list[list[str]], ground_truths: list[str]) -> dict:
     """Run RAGAS evaluation."""
-    zero_result = {
-        "faithfulness": 0.0,
-        "answer_relevancy": 0.0,
-        "context_precision": 0.0,
-        "context_recall": 0.0,
-        "per_question": [],
+    metric_names = (
+        "faithfulness",
+        "answer_relevancy",
+        "context_precision",
+        "context_recall",
+    )
+    fallback = {name: 0.0 for name in metric_names}
+    fallback["per_question"] = []
+
+    lengths = {
+        len(questions),
+        len(answers),
+        len(contexts),
+        len(ground_truths),
     }
-    if not questions or not answers or not contexts or not ground_truths:
-        return zero_result
-    if os.getenv("ENABLE_RAGAS") != "1":
-        return zero_result
-    if not os.getenv("OPENAI_API_KEY"):
-        return zero_result
+    if len(lengths) != 1:
+        print("  ⚠️  RAGAS evaluation failed: input lists must have equal length")
+        return fallback
+    if not questions:
+        return fallback
+
+    def safe_float(value) -> float:
+        try:
+            number = float(value)
+            return number if math.isfinite(number) else 0.0
+        except (TypeError, ValueError):
+            return 0.0
+
     try:
         from datasets import Dataset
         from ragas import evaluate
-        from ragas.metrics import answer_relevancy, context_precision, context_recall, faithfulness
-
-        from config import LLM_API_KEY, LLM_BASE_URL, ANSWER_MODEL
-        from langchain_openai import ChatOpenAI, OpenAIEmbeddings
-
-        llm = ChatOpenAI(
-            model=ANSWER_MODEL,
-            api_key=LLM_API_KEY,
-            base_url=LLM_BASE_URL or None,
-        )
-        embeddings = OpenAIEmbeddings(
-            model="text-embedding-004" if "googleapis.com" in (LLM_BASE_URL or "") else "text-embedding-3-small",
-            api_key=LLM_API_KEY,
-            base_url=LLM_BASE_URL or None,
+        from ragas.metrics import (
+            answer_relevancy,
+            context_precision,
+            context_recall,
+            faithfulness,
         )
 
+        normalized_contexts = [
+            [str(context) for context in context_list if context is not None]
+            for context_list in contexts
+        ]
         dataset = Dataset.from_dict({
-            "question": questions,
-            "answer": answers,
-            "contexts": contexts,
-            "ground_truth": ground_truths,
+            "question": [str(question) for question in questions],
+            "answer": [str(answer) for answer in answers],
+            "contexts": normalized_contexts,
+            "ground_truth": [str(truth) for truth in ground_truths],
         })
         result = evaluate(
             dataset,
-            metrics=[faithfulness, answer_relevancy, context_precision, context_recall],
-            llm=llm,
-            embeddings=embeddings,
+            metrics=[
+                faithfulness,
+                answer_relevancy,
+                context_precision,
+                context_recall,
+            ],
         )
-        df = result.to_pandas()
-        per_question = [
-            EvalResult(
-                question=row["question"],
-                answer=row["answer"],
-                contexts=row["contexts"],
-                ground_truth=row["ground_truth"],
-                faithfulness=float(row.get("faithfulness", 0.0) or 0.0),
-                answer_relevancy=float(row.get("answer_relevancy", 0.0) or 0.0),
-                context_precision=float(row.get("context_precision", 0.0) or 0.0),
-                context_recall=float(row.get("context_recall", 0.0) or 0.0),
+        dataframe = result.to_pandas()
+
+        per_question = []
+        for index, row in dataframe.iterrows():
+            # Some RAGAS versions omit original input columns from the frame,
+            # so the source lists remain the reliable fallback.
+            source_index = int(index) if isinstance(index, int) else len(per_question)
+            row_contexts = row.get("contexts", normalized_contexts[source_index])
+            if not isinstance(row_contexts, list):
+                row_contexts = list(row_contexts) if row_contexts is not None else []
+            per_question.append(EvalResult(
+                question=str(row.get("question", questions[source_index])),
+                answer=str(row.get("answer", answers[source_index])),
+                contexts=[str(context) for context in row_contexts],
+                ground_truth=str(row.get("ground_truth", ground_truths[source_index])),
+                faithfulness=safe_float(row.get("faithfulness", 0.0)),
+                answer_relevancy=safe_float(row.get("answer_relevancy", 0.0)),
+                context_precision=safe_float(row.get("context_precision", 0.0)),
+                context_recall=safe_float(row.get("context_recall", 0.0)),
+            ))
+
+        aggregates = {}
+        for metric_name in metric_names:
+            values = [getattr(item, metric_name) for item in per_question]
+            aggregates[metric_name] = (
+                float(sum(values) / len(values)) if values else 0.0
             )
-            for _, row in df.iterrows()
-        ]
-        return {
-            "faithfulness": float(df.get("faithfulness", []).mean() if "faithfulness" in df else 0.0),
-            "answer_relevancy": float(df.get("answer_relevancy", []).mean() if "answer_relevancy" in df else 0.0),
-            "context_precision": float(df.get("context_precision", []).mean() if "context_precision" in df else 0.0),
-            "context_recall": float(df.get("context_recall", []).mean() if "context_recall" in df else 0.0),
-            "per_question": per_question,
-        }
-    except Exception as e:
-        print(f"  ⚠️  RAGAS evaluation failed: {e}")
-        return zero_result
+        aggregates["per_question"] = per_question
+        return aggregates
+    except Exception as error:
+        print(f"  ⚠️  RAGAS evaluation failed: {error}")
+        return fallback
 
 
 def failure_analysis(eval_results: list[EvalResult], bottom_n: int = 10) -> list[dict]:
     """Analyze bottom-N worst questions using Diagnostic Tree."""
+    if bottom_n <= 0 or not eval_results:
+        return []
+
     diagnostic_tree = {
-        "faithfulness": ("LLM hallucinating", "Tighten prompt and reduce unsupported generation"),
-        "context_recall": ("Missing relevant chunks", "Improve chunking, hybrid retrieval, or recall depth"),
-        "context_precision": ("Too many irrelevant chunks", "Add stronger reranking or metadata filtering"),
-        "answer_relevancy": ("Answer misses the user intent", "Improve answer prompt and query understanding"),
+        "faithfulness": (
+            "Generation failure: the answer contains claims unsupported by the retrieved context.",
+            "Tighten the grounded-answer prompt, lower temperature, and require citations or refusal when evidence is missing.",
+        ),
+        "answer_relevancy": (
+            "Generation failure: the answer does not directly address the user's question.",
+            "Improve the answer prompt, preserve the original query intent, and request a concise direct answer.",
+        ),
+        "context_precision": (
+            "Retrieval/reranking failure: too many irrelevant chunks appear above useful evidence.",
+            "Improve cross-encoder reranking, metadata/version filters, and reduce the final context count.",
+        ),
+        "context_recall": (
+            "Retrieval/chunking failure: the selected context is missing required evidence.",
+            "Improve chunk boundaries, hybrid retrieval, top-k coverage, or parent-context expansion.",
+        ),
     }
 
     analyzed = []
@@ -117,18 +153,27 @@ def failure_analysis(eval_results: list[EvalResult], bottom_n: int = 10) -> list
             "context_precision": float(result.context_precision),
             "context_recall": float(result.context_recall),
         }
-        avg_score = sum(metrics.values()) / 4
+        metrics = {
+            name: value if math.isfinite(value) else 0.0
+            for name, value in metrics.items()
+        }
+        average_score = sum(metrics.values()) / len(metrics)
         worst_metric = min(metrics, key=metrics.get)
         diagnosis, suggested_fix = diagnostic_tree[worst_metric]
         analyzed.append({
             "question": result.question,
+            "answer": result.answer,
+            "ground_truth": result.ground_truth,
+            "contexts": list(result.contexts),
+            "average_score": average_score,
             "worst_metric": worst_metric,
-            "score": avg_score,
+            "score": metrics[worst_metric],
             "diagnosis": diagnosis,
             "suggested_fix": suggested_fix,
         })
 
-    return sorted(analyzed, key=lambda item: item["score"])[:bottom_n]
+    analyzed.sort(key=lambda item: (item["average_score"], item["score"]))
+    return analyzed[:bottom_n]
 
 
 def save_report(results: dict, failures: list[dict], path: str = "ragas_report.json"):

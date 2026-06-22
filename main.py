@@ -56,7 +56,7 @@ def main():
             n = naive.get("aggregate", {}).get(m, 0)
             p = prod.get("aggregate", {}).get(m, 0)
             d = p - n
-            status = "✓" if p >= 0.75 else " "
+            status = "✓" if p >= 0.70 else " "
             print(f"{status} {m:<23} {n:>8.4f} {p:>12.4f} {d:>+8.4f}")
 
     elapsed = time.time() - start

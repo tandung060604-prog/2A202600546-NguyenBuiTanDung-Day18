@@ -1,5 +1,4 @@
 .env
-.env
 .DS_Store
 __pycache__/
 *.pyc
@@ -8,3 +7,5 @@ qdrant_data/
 *.egg-info/
 reports/*.json
 .venv/
+__pycache__/
+*.pyc

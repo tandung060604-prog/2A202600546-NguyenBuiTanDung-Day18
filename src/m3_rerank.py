@@ -25,43 +25,50 @@ class CrossEncoderReranker:
 
     def _load_model(self):
         if self._model is None:
-            if os.getenv("USE_HEAVY_MODELS") == "1":
-                from sentence_transformers import CrossEncoder
-
-                self._model = CrossEncoder(self.model_name)
-            else:
-                self._model = None
+            from sentence_transformers import CrossEncoder
+            self._model = CrossEncoder(self.model_name)
         return self._model
 
     def rerank(self, query: str, documents: list[dict], top_k: int = RERANK_TOP_K) -> list[RerankResult]:
         """Rerank documents: top-20 → top-k."""
-        if not documents:
+        if not documents or top_k <= 0:
             return []
 
         model = self._load_model()
-        if model is not None:
-            pairs = [(query, doc["text"]) for doc in documents]
-            scores = model.predict(pairs)
-            if isinstance(scores, (int, float)):
-                scores = [scores]
-        else:
-            query_tokens = set(query.lower().split())
-            scores = []
-            for doc in documents:
-                doc_tokens = set(doc["text"].lower().split())
-                overlap = len(query_tokens & doc_tokens)
-                scores.append(float(overlap))
+        if model is None:
+            raise RuntimeError("Cross-encoder model could not be loaded")
 
-        scored = sorted(zip(scores, documents), key=lambda x: float(x[0]), reverse=True)
+        pairs = [(query, str(document.get("text", ""))) for document in documents]
+        scores = model.predict(pairs)
+
+        # CrossEncoder normally returns np.ndarray, but custom/test models may
+        # return a scalar, list, tensor, or shape (n, 1).
+        try:
+            import numpy as np
+            normalized_scores = np.asarray(scores, dtype=float).reshape(-1).tolist()
+        except (TypeError, ValueError):
+            normalized_scores = [float(scores)]
+
+        if len(normalized_scores) != len(documents):
+            raise ValueError(
+                "Cross-encoder returned a different number of scores "
+                f"({len(normalized_scores)}) than documents ({len(documents)})"
+            )
+
+        scored = sorted(
+            zip(normalized_scores, documents),
+            key=lambda item: item[0],
+            reverse=True,
+        )
         return [
             RerankResult(
-                text=doc["text"],
-                original_score=float(doc.get("score", 0.0)),
+                text=str(document.get("text", "")),
+                original_score=float(document.get("score", 0.0)),
                 rerank_score=float(score),
-                metadata=doc.get("metadata", {}),
-                rank=i,
+                metadata=dict(document.get("metadata", {})),
+                rank=rank,
             )
-            for i, (score, doc) in enumerate(scored[:top_k])
+            for rank, (score, document) in enumerate(scored[:top_k], start=1)
         ]
 
 
@@ -71,7 +78,9 @@ class FlashrankReranker:
         self._model = None
 
     def rerank(self, query: str, documents: list[dict], top_k: int = RERANK_TOP_K) -> list[RerankResult]:
-        # Optional placeholder for a faster reranker implementation.
+        # Optional implementation: from flashrank import Ranker, RerankRequest
+        # model = Ranker(); passages = [{"text": d["text"]} for d in documents]
+        # results = model.rerank(RerankRequest(query=query, passages=passages))
         return []
 
 
