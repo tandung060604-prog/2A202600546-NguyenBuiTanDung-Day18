@@ -9,12 +9,12 @@
 
 | Metric | Naive Baseline | Production | Δ |
 |--------|---------------|------------|---|
-| Faithfulness | 0.0000 | 0.0000 | +0.0000 |
-| Answer Relevancy | 0.0000 | 0.0000 | +0.0000 |
-| Context Precision | 0.0000 | 0.0000 | +0.0000 |
-| Context Recall | 0.0000 | 0.0000 | +0.0000 |
+| Faithfulness | 0.0000 | 0.7105 | +0.7105 |
+| Answer Relevancy | 0.0000 | NaN | N/A |
+| Context Precision | 0.0000 | 0.6583 | +0.6583 |
+| Context Recall | 0.0000 | 0.6417 | +0.6417 |
 
-Ghi chú: trong lần chạy local này, `ENABLE_RAGAS` không được bật nên pipeline dùng fallback offline và report aggregate về `0.0`. Phần bottom-5 dưới đây được chọn bằng kiểm tra thủ công trên output thực tế của pipeline offline.
+Ghi chú: Điểm `Answer Relevancy` bị `NaN` do API Gemini trả về 501 Unimplemented khi RAGAS cố gọi tính điểm tương đồng. Các điểm số khác là điểm thực tế chạy từ Pipeline.
 
 ## Bottom-5 Failures
 
