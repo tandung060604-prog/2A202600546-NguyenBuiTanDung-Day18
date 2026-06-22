@@ -1,0 +1,81 @@
+{
+  "aggregate": {
+    "faithfulness": 0.7105263157894737,
+    "answer_relevancy": NaN,
+    "context_precision": 0.6583333332700001,
+    "context_recall": 0.6416666666666666
+  },
+  "num_questions": 20,
+  "failures": [
+    {
+      "question": "Nhân viên được nghỉ bao nhiêu ngày khi kết hôn?",
+      "worst_metric": "context_precision",
+      "score": NaN,
+      "diagnosis": "Too many irrelevant chunks",
+      "suggested_fix": "Add stronger reranking or metadata filtering"
+    },
+    {
+      "question": "Bảo hiểm sức khỏe PVI có hạn mức bao nhiêu cho nhân viên?",
+      "worst_metric": "context_precision",
+      "score": NaN,
+      "diagnosis": "Too many irrelevant chunks",
+      "suggested_fix": "Add stronger reranking or metadata filtering"
+    },
+    {
+      "question": "Phụ cấp ăn trưa hàng tháng là bao nhiêu?",
+      "worst_metric": "context_precision",
+      "score": NaN,
+      "diagnosis": "Too many irrelevant chunks",
+      "suggested_fix": "Add stronger reranking or metadata filtering"
+    },
+    {
+      "question": "Nhân viên được nghỉ bao nhiêu ngày phép năm?",
+      "worst_metric": "faithfulness",
+      "score": NaN,
+      "diagnosis": "LLM hallucinating",
+      "suggested_fix": "Tighten prompt and reduce unsupported generation"
+    },
+    {
+      "question": "Thâm niên bao nhiêu năm thì được cộng thêm ngày phép?",
+      "worst_metric": "context_recall",
+      "score": NaN,
+      "diagnosis": "Missing relevant chunks",
+      "suggested_fix": "Improve chunking, hybrid retrieval, or recall depth"
+    },
+    {
+      "question": "Mật khẩu phải có tối thiểu bao nhiêu ký tự?",
+      "worst_metric": "context_precision",
+      "score": NaN,
+      "diagnosis": "Too many irrelevant chunks",
+      "suggested_fix": "Add stronger reranking or metadata filtering"
+    },
+    {
+      "question": "Bao lâu phải đổi mật khẩu một lần?",
+      "worst_metric": "context_precision",
+      "score": NaN,
+      "diagnosis": "Too many irrelevant chunks",
+      "suggested_fix": "Add stronger reranking or metadata filtering"
+    },
+    {
+      "question": "Có cần kích hoạt xác thực đa yếu tố (MFA) không?",
+      "worst_metric": "context_precision",
+      "score": NaN,
+      "diagnosis": "Too many irrelevant chunks",
+      "suggested_fix": "Add stronger reranking or metadata filtering"
+    },
+    {
+      "question": "Nhân viên thử việc có được nghỉ phép năm không?",
+      "worst_metric": "context_precision",
+      "score": NaN,
+      "diagnosis": "Too many irrelevant chunks",
+      "suggested_fix": "Add stronger reranking or metadata filtering"
+    },
+    {
+      "question": "Khi phát hiện malware trên máy, nhân viên có nên tự xử lý không?",
+      "worst_metric": "context_recall",
+      "score": NaN,
+      "diagnosis": "Missing relevant chunks",
+      "suggested_fix": "Improve chunking, hybrid retrieval, or recall depth"
+    }
+  ]
+}
